@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Факторизация методом Полларда (ρ)</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+    }
+    input, button {
+      padding: 8px;
+      margin-top: 10px;
+      width: 100%;
+      font-size: 16px;
+    }
+    .output {
+      background: #f5f5f5;
+      padding: 10px;
+      margin-top: 10px;
+      white-space: pre-wrap;
+      max-height: 400px;
+      overflow-y: auto;
+      border-radius: 12px;
+      border: 2px solid transparent;
+      box-shadow: 0 0 10px rgba(0, 200, 255, 0.3);
+      animation: glow-border 2.5s ease-in-out infinite alternate;
+    }
+    @keyframes glow-border {
+      0% {
+        border-color: rgba(0, 200, 255, 0.3);
+        box-shadow: 0 0 10px rgba(0, 200, 255, 0.3);
+      }
+      100% {
+        border-color: rgba(0, 255, 180, 0.8);
+        box-shadow: 0 0 20px rgba(0, 255, 180, 0.8);
+      }
+    }
+    .success {
+      background: #e0ffe0;
+      border: 1px solid #66cc66;
+    }
+    .error {
+      background: #ffe0e0;
+      border: 1px solid #cc6666;
+    }
+  </style>
+</head>
+<body>
+  <h1>Факторизация методом Полларда (ρ)</h1>
+  <input type="text" id="n" placeholder="Число n для факторизации">
+  <button onclick="runFactorization()">Факторизовать</button>
+  <div class="output" id="factor-output"></div>
+
+  <script>
+    // Вычисление наибольшего общего делителя двух чисел
+    function gcd(a, b) {
+      while (b !== 0) {
+        [a, b] = [b, a % b]; // Итеративно применяем алгоритм Евклида
+      }
+      return a;
+    }
+
+    // Реализация метода Полларда (ρ) для нахождения одного нетривиального делителя числа n
+    function pollardRho(n, log = []) {
+      if (n % 2 === 0) {
+        log.push(`Число четное, делитель: 2`); // Обработка простого случая
+        return 2;
+      }
+      let x = 2, y = 2, d = 1;
+      const f = x => (x * x + 1) % n; // Используем f(x) = x^2 + 1 mod n
+
+      log.push(`Начинаем с x = y = 2`);
+      // Основной цикл: пока не найдём делитель (d > 1 и d < n)
+      while (d === 1) {
+        x = f(x);         // Перемещаем x на 1 шаг вперёд
+        y = f(f(y));      // Перемещаем y на 2 шага вперёд (быстрый заяц)
+        d = gcd(Math.abs(x - y), n); // Ищем НОД между ними
+        log.push(`x = ${x}, y = ${y}, gcd(|x - y|, n) = ${d}`);
+      }
+      if (d === n) {
+        log.push(`Неудача: делитель равен n. Возвращаем null.`); // Случай неудачи
+        return null;
+      }
+      log.push(`Найден делитель: ${d}`);
+      return d;
+    }
+
+    // Основная функция факторизации, рекурсивно применяет метод Полларда
+    function factorize(n) {
+      const factors = [];     // Список найденных простых множителей
+      const log = [];         // Список логов всех шагов
+      const stack = [n];      // Стек для хранения ещё не разложенных чисел
+
+      // Пока в стеке есть числа для обработки
+      while (stack.length > 0) {
+        const current = stack.pop(); // Берём очередное число
+        if (current === 1) continue; // Пропускаем 1
+
+        // Если число простое — добавляем сразу в результат
+        if (isPrime(current)) {
+          log.push(`${current} — простое число`);
+          factors.push(current);
+          continue;
+        }
+
+        const stepLog = []; // Лог текущей итерации
+        const d = pollardRho(current, stepLog); // Ищем делитель
+        log.push(...stepLog); // Добавляем лог итерации в общий лог
+
+        if (!d) {
+          log.push(`Не удалось найти делитель для ${current}, добавляем как есть.`);
+          factors.push(current); // Если делитель не найден, добавляем число как есть
+        } else {
+          const other = current / d;
+          log.push(`Разбиваем ${current} на ${d} и ${other}`);
+          stack.push(d);     // Добавляем найденные делители обратно в стек
+          stack.push(other);
+        }
+      }
+
+      // Возвращаем отсортированный список множителей и лог
+      return { factors: factors.sort((a, b) => a - b), log };
+    }
+
+    // Простая проверка на простоту числа методом перебора
+    function isPrime(n) {
+      if (n < 2) return false;
+      if (n === 2) return true;
+      if (n % 2 === 0) return false;
+      for (let i = 3; i * i <= n; i += 2) {
+        if (n % i === 0) return false;
+      }
+      return true;
+    }
+
+    // Запуск факторизации и отображение результата в интерфейсе
+    function runFactorization() {
+      const n = parseInt(document.getElementById("n").value); // Получаем значение
+      const output = document.getElementById("factor-output"); // Элемент вывода
+      output.innerHTML = '';
+
+      // Проверка корректности ввода
+      if (isNaN(n) || n <= 1) {
+        output.innerHTML = "<div class='error'>Введите корректное число > 1</div>";
+        return;
+      }
+
+      const { factors, log } = factorize(n); // Вызываем факторизацию
+      const breakdown = factors.join(' × '); // Собираем красивый вывод
+
+      // Формируем финальный результат + лог
+      output.innerHTML = `<div class='success'>Факторы числа ${n}: ${breakdown}</div><br><strong>Лог:</strong>
+` + log.join('\n');
+    }
+  </script>
+</body>
+</html>
