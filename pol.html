@@ -4,9 +4,10 @@
   <meta charset="UTF-8">
   <title>Метод Полларда (ρ) — Дискретный логарифм</title>
   <style>
+    /* Оформление */
     body {
       font-family: sans-serif;
-      max-width: 640px;
+      max-width: 700px;
       margin: 40px auto;
       padding: 0 20px;
     }
@@ -68,11 +69,12 @@
   <input type="text" id="h" placeholder="Значение h = g^x mod p" value="3441">
   <input type="text" id="p" placeholder="Модуль p (простое число)" value="10007">
   <button onclick="runLogarithm()">Найти логарифм</button>
-  <button onclick="repeatAttempt()">Повторить попытку</button>
+  <button onclick="startAutoSearch()">Авто-поиск</button>
+  <button onclick="stopAutoSearch()">Стоп</button>
   <div class="output" id="log-output"></div>
 
   <script>
-    // Наибольший общий делитель (используется для проверки обратимости)
+    // Функция для нахождения наибольшего общего делителя
     function gcd(a, b) {
       while (b !== 0n) [a, b] = [b, a % b];
       return a;
@@ -91,7 +93,7 @@
       return result;
     }
 
-    // Обратный элемент по модулю (используется при нахождении логарифма)
+    // Обратный элемент по модулю (расширенный алгоритм Евклида)
     function modInverse(a, mod) {
       let m0 = mod, x0 = 0n, x1 = 1n;
       if (mod === 1n) return 0n;
@@ -104,103 +106,167 @@
       return x1 < 0n ? x1 + m0 : x1;
     }
 
-    // Алгоритм Полларда ρ для дискретного логарифма
-    function pollardsRhoLog(g, h, p, maxIter = 100000) {
-      const n = p - 1n; // порядок мультипликативной группы
-      let a = 0n, b = 0n, A = 0n, B = 0n; // счетчики для x и X
-      let x = 1n, X = 1n; // начальные значения двух последовательностей
-      const log = [`Начало алгоритма при g = ${g}, h = ${h}, p = ${p}`];
+    let autoRunning = false; // Флаг для авто-поиска
+    let attemptCount = 0; // Счётчик попыток
 
-      // Разделение на три подмножества (итерационная функция)
-      const f = (val, a, b) => {
-        const r = val % 3n;
-        if (r === 0n) {
-          val = (val * g) % p;
-          a = (a + 1n) % n;
-        } else if (r === 1n) {
-          val = (val * h) % p;
-          b = (b + 1n) % n;
-        } else {
-          val = (val * val) % p;
-          a = (2n * a) % n;
-          b = (2n * b) % n;
-        }
-        return [val, a, b];
-      };
-
-      // Основной цикл алгоритма
-      for (let i = 1; i <= maxIter; i++) {
-        [x, a, b] = f(x, a, b);          // медленная цепочка
-        [X, A, B] = f(...f(X, A, B));    // быстрая цепочка (2 шага)
-
-        // лог текущих значений
-        log.push(`Итерация ${i}: x = ${x}, X = ${X}, a = ${a}, A = ${A}, b = ${b}, B = ${B}`);
-
-        // При совпадении элементов двух цепочек
-        if (x === X) {
-          const r = (a - A + n) % n;
-          const s = (B - b + n) % n;
-          log.push(`Найдено совпадение: x = X = ${x}`);
-          if (s === 0n || gcd(s, n) !== 1n) {
-            log.push(`s = ${s} не пригоден для обращения. Повторить попытку.`);
-            return { x: null, log };
-          }
-          const sInv = modInverse(s, n); // обращение s
-          const result = (r * sInv) % n; // вычисление логарифма
-          log.push(`Вычислен результат: x = ${result}`);
-          return { x: result, log };
-        }
-      }
-
-      // Если не найдено за отведенное число итераций
-      log.push("Дискретный логарифм не найден за максимальное число итераций.");
-      return { x: null, log };
+    // Запуск авто-поиска
+    function startAutoSearch() {
+      autoRunning = true;
+      autoAttempt();
     }
 
-    // Запуск алгоритма по нажатию кнопки
-    function runLogarithm() {
+    // Остановка авто-поиска
+    function stopAutoSearch() {
+      autoRunning = false;
+    }
+
+    // Процесс автоматического поиска x
+    function autoAttempt() {
+      if (!autoRunning) return; // Если авто-поиск остановлен, выходим
+      attemptCount++; // Увеличиваем счётчик попыток
+
+      // Получаем g, h и p из полей ввода
       const g = BigInt(document.getElementById("g").value);
       const h = BigInt(document.getElementById("h").value);
       const p = BigInt(document.getElementById("p").value);
-      const output = document.getElementById("log-output");
-      output.innerHTML = "";
+      const n = p - 1n; // Значение n = p - 1 (используется в алгоритме Полларда)
 
-      // Проверка на валидность входных данных
-      if (p <= 1n || g <= 0n || h < 0n || g >= p || h >= p) {
-        output.innerHTML = "<div class='error'>Неверные входные данные</div>";
-        return;
-      }
+      // Случайные начальные значения для a и b
+      let a = BigInt(Math.floor(Math.random() * Number(n)));
+      let b = BigInt(Math.floor(Math.random() * Number(n)));
+      let x = (modPow(g, a, p) * modPow(h, b, p)) % p;
 
-      try {
-        const { x, log } = pollardsRhoLog(g, h, p);
-        if (x !== null && modPow(g, x, p) === h) {
-          output.innerHTML = `<div class='success'>Найден x: ${x}</div><br><strong>Лог:</strong><br>` + log.join("\n");
+      let A = a, B = b, X = x;
+
+      let log = [`Попытка №${attemptCount}`];
+
+      // Функция перехода: определяет новое состояние в зависимости от остатка от деления на 3
+      const f = (val, a, b) => {
+        const r = val % 3n; // Вычисляем остаток от деления
+        if (r === 0n) {
+          val = (val * g) % p;  // Умножаем на g, если остаток 0
+          a = (a + 1n) % n;     // Увеличиваем a на 1, если остаток 0
+        } else if (r === 1n) {
+          val = (val * h) % p;  // Умножаем на h, если остаток 1
+          b = (b + 1n) % n;     // Увеличиваем b на 1, если остаток 1
         } else {
-          output.innerHTML = `<div class='error'>x не найден</div><br><strong>Лог:</strong><br>` + log.join("\n");
+          val = (val * val) % p; // Умножаем на себя, если остаток 2
+          a = (2n * a) % n;      // Удваиваем a, если остаток 2
+          b = (2n * b) % n;      // Удваиваем b, если остаток 2
         }
-      } catch (e) {
-        output.innerHTML = `<div class='error'>Ошибка: ${e.message}</div>`;
+        return [val, a, b];  // Возвращаем обновленные значения
+      };
+
+      // --- Алгоритм Флойда (заяц и черепаха) ---
+      for (let i = 1; i <= 100000; i++) {
+        [x, a, b] = f(x, a, b);           // Черепаха делает 1 шаг
+        [X, A, B] = f(...f(X, A, B));     // Заяц делает 2 шага
+
+        if (i % 10000 === 0) {
+          log.push(`Итерация ${i}: x=${x}, X=${X}`);
+        }
+
+        // Найдено совпадение — возможно цикл
+        if (x === X) {
+          const r = (a - A + n) % n; // Разница между текущими a и A
+          const s = (B - b + n) % n; // Разница между текущими b и B
+
+          if (s === 0n || gcd(s, n) !== 1n) { // Проверка, что s не обрабатывается
+            log.push(`s=${s} не обратим. Попытка неудачна.`);
+            break; // Выход из цикла, если не удаётся найти x
+          }
+
+          const sInv = modInverse(s, n); // Нахождение обратного элемента для s
+          const result = (r * sInv) % n; // Вычисление x
+
+          // Проверка, что найденное значение x является решением
+          if (modPow(g, result, p) === h) {
+            log.unshift(`<div class='success'>Успешно на попытке #${attemptCount}: x = ${result}</div>`);
+            prependLog(log);
+            autoRunning = false; // Останавливаем авто-поиск после успеха
+            return;
+          } else {
+            log.push(`x = ${result} не подходит.`);
+            break; // Прерываем попытку, если найденное x не подходит
+          }
+        }
       }
+      prependLog(log); // Выводим лог
+      if (autoRunning) setTimeout(autoAttempt, 0); // Запускаем следующую попытку, если авто-поиск активен
     }
 
-    // Повторная попытка с новыми случайными g, x, h
-    function repeatAttempt() {
-      const p = BigInt(document.getElementById("p").value);
-      // g случайное от 2 до p - 2
-      const g = BigInt(2n + BigInt(Math.floor(Math.random() * Number(p - 3n))));
-      // x случайное от 1 до p - 2
-      const x = BigInt(1n + BigInt(Math.floor(Math.random() * Number(p - 2n))));
-      // h = g^x mod p
-      const h = modPow(g, x, p);
-
-      document.getElementById("g").value = g;
-      document.getElementById("h").value = h;
-
+    // Вставка блока лога сверху
+    function prependLog(lines) {
       const output = document.getElementById("log-output");
-      // Показать сгенерированное x пользователю
-      output.innerHTML = `<div class='info-box'>Случайно сгенерированное значение x: ${x}</div>`;
+      const div = document.createElement("div");
+      div.innerText = lines.join("\n");
+      div.style.marginBottom = "20px";
+      output.prepend(div); // Добавляем лог в начало
+    }
 
-      runLogarithm();
+    // Ручной запуск алгоритма Полларда
+    function runLogarithm() {
+      autoRunning = false; // Останавливаем авто-поиск
+      attemptCount = 1; // Сбрасываем счётчик попыток
+
+      // Получаем g, h и p из полей ввода
+      const g = BigInt(document.getElementById("g").value);
+      const h = BigInt(document.getElementById("h").value);
+      const p = BigInt(document.getElementById("p").value);
+      const n = p - 1n; // Значение n = p - 1
+
+      let a = BigInt(Math.floor(Math.random() * Number(n)));
+      let b = BigInt(Math.floor(Math.random() * Number(n)));
+      let x = (modPow(g, a, p) * modPow(h, b, p)) % p;
+      let A = a, B = b, X = x;
+
+      let log = [`Ручной запуск`];
+
+      const f = (val, a, b) => {
+        const r = val % 3n; // Вычисляем остаток от деления
+        if (r === 0n) {
+          val = (val * g) % p;  // Умножаем на g, если остаток 0
+          a = (a + 1n) % n;     // Увеличиваем a на 1, если остаток 0
+        } else if (r === 1n) {
+          val = (val * h) % p;  // Умножаем на h, если остаток 1
+          b = (b + 1n) % n;     // Увеличиваем b на 1, если остаток 1
+        } else {
+          val = (val * val) % p; // Умножаем на себя, если остаток 2
+          a = (2n * a) % n;      // Удваиваем a, если остаток 2
+          b = (2n * b) % n;      // Удваиваем b, если остаток 2
+        }
+        return [val, a, b];  // Возвращаем обновленные значения
+      };
+
+      // Процесс поиска x
+      for (let i = 1; i <= 100000; i++) {
+        [x, a, b] = f(x, a, b);
+        [X, A, B] = f(...f(X, A, B));
+
+        if (i % 10000 === 0) log.push(`Итерация ${i}: x=${x}, X=${X}`);
+
+        // Если нашли совпадение
+        if (x === X) {
+          const r = (a - A + n) % n;
+          const s = (B - b + n) % n;
+
+          if (s === 0n || gcd(s, n) !== 1n) {
+            log.push(`s=${s} не обратим. Неудача.`);
+            break;
+          }
+
+          const sInv = modInverse(s, n);
+          const result = (r * sInv) % n;
+
+          if (modPow(g, result, p) === h) {
+            log.unshift(`<div class='success'>Найден x = ${result}</div>`);
+          } else {
+            log.push(`x = ${result} не подходит.`);
+          }
+          break;
+        }
+      }
+      prependLog(log); // Выводим логи
     }
   </script>
 </body>
